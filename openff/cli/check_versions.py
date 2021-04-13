@@ -1,4 +1,14 @@
 import importlib
+import logging
+
+import click
+
+# The OpenFF toolkit's use of the logging modules prints its "you don't have
+# OpenEye installed" error to STDERR. We do not wish to capture this here, so
+# set the minimum logging level to ERROR. See
+# https://docs.python.org/3/library/logging.html#logging-levels
+
+logging.getLogger("openforcefield").setLevel(logging.ERROR)
 
 
 def get_versions():
@@ -29,7 +39,7 @@ def get_versions():
     return out
 
 
-if __name__ == "__main__":
-    # TODO: Have this function return the string, without printing above
-    #  or return an exit code here
-    print(get_versions())
+@click.command("check_versions")
+def check_versions_command():
+    """Check the installed versions of OpenFF software."""
+    click.echo(get_versions())

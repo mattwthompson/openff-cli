@@ -1,6 +1,6 @@
-import argparse
 from typing import List
 
+import click
 from openforcefield.topology import Molecule
 from openforcefield.utils.toolkits import ToolkitRegistry
 from simtk import unit
@@ -43,12 +43,6 @@ def get_conformer_energies(
                 mols[-1].add_conformer(conformer)
         else:
             mols.append(molecule)
-
-    n_molecules = len(mols)
-    n_conformers = sum([mol.n_conformers for mol in mols])
-    print(
-        f"{n_molecules} unique molecule(s) loaded, with {n_conformers} total conformers"
-    )
 
     ff = _get_forcefield(forcefield, constrained)
 
@@ -98,77 +92,80 @@ def get_conformer_energies(
 
 
 def _print_mol_data(mols):
+    out = ""
+
+    n_molecules = len(mols)
+    n_conformers = sum([mol.n_conformers for mol in mols])
+    out += f"{n_molecules} unique molecule(s) loaded, with {n_conformers} total conformers\n"
+
     pre_key = "original conformer energies (kcal/mol)"
     min_key = "minimized conformer energies (kcal/mol)"
     rmsd_key = "RMSD of minimized conformers (angstrom)"
     for mol_idx, mol in enumerate(mols):
         forcefield = mol.properties["minimized against: "]
-        print(f"Conformer energies of mol {mol.name}, minimized against {forcefield}")
-        print(
-            "Conformer         Initial PE         Minimized PE       "
-            "RMS between initial and minimized conformer"
+        out += f"Conformer energies of mol {mol.name}, minimized against {forcefield}\n"
+        out += (
+            "Conformer         Initial PE         Minimized PE       \n"
+            "RMS between initial and minimized conformer\n"
         )
         for conformer_idx in range(mol.n_conformers):
             pre_energy = mol.properties[pre_key][conformer_idx]
             min_energy = mol.properties[min_key][conformer_idx]
             rmsd = mol.properties[rmsd_key][conformer_idx]
-            print(
-                "%5d / %5d : %8.3f kcal/mol %8.3f kcal/mol  %8.3f Angstroms"
-                % (
-                    conformer_idx + 1,
-                    mol.n_conformers,
-                    pre_energy / unit.kilocalories_per_mole,
-                    min_energy / unit.kilocalories_per_mole,
-                    rmsd,
-                )
+            out += "%5d / %5d : %8.3f kcal/mol %8.3f kcal/mol  %8.3f Angstroms\n" % (
+                conformer_idx + 1,
+                mol.n_conformers,
+                pre_energy / unit.kilocalories_per_mole,
+                min_energy / unit.kilocalories_per_mole,
+                rmsd,
             )
 
+    return out
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Evaluate conformer energies with OpenMM"
-    )
-    parser._action_groups.pop()
-    required_args = parser.add_argument_group("required arguments")
-    optional_args = parser.add_argument_group("optional arguments")
 
-    required_args.add_argument(
-        "-t",
-        "--toolkit",
-        type=str,
-        required=True,
-        help="Name of the underlying cheminformatics toolkit to use. Accepted"
-        " values are openeye and rdkit",
-    )
-    required_args.add_argument(
-        "-f",
-        "--forcefield",
-        type=str,
-        required=True,
-        help="Name of the force field to use, i.e. openff-1.0.0",
-    )
-    required_args.add_argument(
-        "-m",
-        "--molecule",
-        type=str,
-        required=True,
-        help="Path to an input file containing a molecule(s), single or multi-conformers",
-    )
-    optional_args.add_argument(
-        "--constrained",
-        type=bool,
-        default=False,
-        help="Whether or not to use a constrained version of the force field",
-    )
-    args = parser.parse_args()
-
-    registry = make_registry(args.toolkit)
+# TODO: Maybe use https://github.com/click-contrib/click-option-group
+@click.command("get_conformer_energies")
+@click.option(
+    "-t",
+    "--toolkit",
+    type=click.Choice(["openeye", "rdkit"]),
+    required=True,
+    help="Name of the underlying cheminformatics toolkit to use. Accepted values are openeye and rdkit",
+)
+@click.option(
+    "-f",
+    "--forcefield",
+    type=str,
+    required=True,
+    help="Name of the force field to use, i.e. openff-1.0.0",
+)
+@click.option(
+    "-m",
+    "--molecule",
+    type=str,
+    required=True,
+    help="Path to an input file containing a molecule(s)",
+)
+@click.option(
+    "--constrained",
+    type=bool,
+    default=False,
+    help="Whether or not to use a constrained version of the force field",
+)
+def get_conformer_energies_command(
+    toolkit,
+    forcefield,
+    molecule,
+    constrained,
+):
+    """Evaluate conformer energies with OpenMM"""
+    registry = make_registry(toolkit)
 
     mols = get_conformer_energies(
-        molecule=args.molecule,
+        molecule=molecule,
         registry=registry,
-        forcefield=args.forcefield,
-        constrained=args.constrained,
+        forcefield=forcefield,
+        constrained=constrained,
     )
 
-    _print_mol_data(mols)
+    click.echo(_print_mol_data(mols))
